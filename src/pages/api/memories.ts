@@ -4,20 +4,22 @@ import path from 'path'
 import matter from 'gray-matter'
 import type { Memory, MemoryType } from '@/types/memory'
 
-function findMemoryFiles(dir: string): string[] {
+function findMemoryFiles(dir: string, insideMemoryDir = false): string[] {
   const results: string[] = []
   if (!fs.existsSync(dir)) return results
+
+  const isMemoryDir = insideMemoryDir || path.basename(dir) === 'memory'
 
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      results.push(...findMemoryFiles(fullPath))
+      results.push(...findMemoryFiles(fullPath, isMemoryDir))
     } else if (
       entry.isFile() &&
       entry.name.endsWith('.md') &&
       entry.name !== 'MEMORY.md' &&
-      fullPath.includes(`${path.sep}memory${path.sep}`)
+      isMemoryDir
     ) {
       results.push(fullPath)
     }
@@ -26,7 +28,11 @@ function findMemoryFiles(dir: string): string[] {
 }
 
 function projectSlugFromPath(filePath: string): string {
-  const claudeProjectsDir = path.join(process.env.HOME || '~', '.claude', 'projects')
+  const home = process.env.HOME || '~'
+  const globalMemoryDir = path.join(home, '.claude', 'memory')
+  if (filePath.startsWith(globalMemoryDir)) return 'global'
+
+  const claudeProjectsDir = path.join(home, '.claude', 'projects')
   const relative = path.relative(claudeProjectsDir, filePath)
   return relative.split(path.sep)[0] || 'unknown'
 }
@@ -45,8 +51,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse<Memory
   }
 
   try {
-    const claudeProjectsDir = path.join(process.env.HOME || '~', '.claude', 'projects')
-    const files = findMemoryFiles(claudeProjectsDir)
+    const home = process.env.HOME || '~'
+    const claudeProjectsDir = path.join(home, '.claude', 'projects')
+    const globalMemoryDir = path.join(home, '.claude', 'memory')
+
+    const files = [
+      ...findMemoryFiles(globalMemoryDir),
+      ...findMemoryFiles(claudeProjectsDir),
+    ]
 
     const memories: Memory[] = files.map((filePath) => {
       const raw = fs.readFileSync(filePath, 'utf-8')

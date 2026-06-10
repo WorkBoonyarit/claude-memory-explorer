@@ -1,6 +1,7 @@
 const SKIP_DIRS = new Set(['Documents', 'Desktop', 'Downloads', 'Projects', 'Code', 'dev', 'src', 'repos', 'workspace', 'work'])
 
 export function getProjectLabel(slug: string, allSlugs: string[]): string {
+  if (slug === 'global') return 'Global (~/.claude/memory)'
   const common = allSlugs.reduce((acc, s) => {
     let i = 0
     while (i < acc.length && i < s.length && acc[i] === s[i]) i++
