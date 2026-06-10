@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/router'
 import Link from 'next/link'
 import type { Memory, MemoryType } from '@/types/memory'
 import MemoryCard from '@/components/MemoryCard'
 import MemoryDetail from '@/components/MemoryDetail'
+import { getProjectLabel } from '@/utils/projectLabel'
 
 type FilterType = 'all' | MemoryType
 
@@ -15,10 +17,12 @@ const TYPE_FILTERS: { label: string; value: FilterType }[] = [
 ]
 
 export default function HomePage() {
+  const router = useRouter()
   const [memories, setMemories] = useState<Memory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+  const [activeProject, setActiveProject] = useState<string | null>(null)
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null)
   const [search, setSearch] = useState('')
   const [projectsExpanded, setProjectsExpanded] = useState(false)
@@ -27,15 +31,24 @@ export default function HomePage() {
     fetch('/api/memories')
       .then((res) => res.json())
       .then((data: Memory[] | { error: string }) => {
-        if (Array.isArray(data)) setMemories(data)
-        else setError(data.error ?? 'Failed to load memories')
+        if (Array.isArray(data)) {
+          setMemories(data)
+          const file = router.query.file as string | undefined
+          if (file) {
+            const match = data.find((m) => m.filePath === file)
+            if (match) setSelectedMemory(match)
+          }
+        } else {
+          setError(data.error ?? 'Failed to load memories')
+        }
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [router.query.file])
 
   const filtered = useMemo(() => {
     let result = activeFilter === 'all' ? memories : memories.filter((m) => m.type === activeFilter)
+    if (activeProject) result = result.filter((m) => m.projectSlug === activeProject)
     const q = search.trim().toLowerCase()
     if (q) {
       result = result.filter(
@@ -46,7 +59,7 @@ export default function HomePage() {
       )
     }
     return result
-  }, [memories, activeFilter, search])
+  }, [memories, activeFilter, activeProject, search])
 
   const projectCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -54,12 +67,18 @@ export default function HomePage() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [memories])
 
+  const allSlugs = useMemo(() => projectCounts.map(([slug]) => slug), [projectCounts])
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <h1 className="text-xl font-bold text-gray-900">Claude Memory Explorer</h1>
         <p className="text-sm text-gray-500 mt-0.5">Browse memory files from ~/.claude/projects/</p>
-        <Link href="/graph" className="text-sm text-indigo-600 hover:underline mt-1 inline-block">View graph →</Link>
+        <div className="flex gap-3 mt-1">
+          <Link href="/graph" className="text-sm text-indigo-600 hover:underline">View graph →</Link>
+          <Link href="/types" className="text-sm text-indigo-600 hover:underline">Memory types →</Link>
+          <Link href="/claude-md" className="text-sm text-indigo-600 hover:underline">CLAUDE.md →</Link>
+        </div>
       </header>
 
       <div className="flex" style={{ height: 'calc(100vh - 73px)' }}>
@@ -118,7 +137,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Project summary */}
+          {/* Project filter */}
           {!loading && !error && projectCounts.length > 0 && (
             <div className="border-t border-gray-100 px-4 py-3">
               <button
@@ -130,12 +149,37 @@ export default function HomePage() {
                 <span>{projectsExpanded ? '▲' : '▼'}</span>
               </button>
               {projectsExpanded && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveProject(null); setSelectedMemory(null) }}
+                    className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition-colors ${
+                      activeProject === null
+                        ? 'bg-indigo-50 text-indigo-700 font-medium'
+                        : 'text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span>All projects</span>
+                    <span className={`rounded-full px-2 py-0.5 ${activeProject === null ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+                      {memories.length}
+                    </span>
+                  </button>
                   {projectCounts.map(([slug, count]) => (
-                    <div key={slug} className="flex items-center justify-between px-1 py-0.5">
-                      <span className="text-xs text-gray-600 font-mono truncate max-w-[210px]" title={slug}>{slug}</span>
-                      <span className="text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 ml-2 flex-shrink-0">{count}</span>
-                    </div>
+                    <button
+                      key={slug}
+                      type="button"
+                      onClick={() => { setActiveProject(slug); setSelectedMemory(null) }}
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition-colors ${
+                        activeProject === slug
+                          ? 'bg-indigo-50 text-indigo-700 font-medium'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="truncate max-w-[180px] text-left" title={slug}>{getProjectLabel(slug, allSlugs)}</span>
+                      <span className={`rounded-full px-2 py-0.5 ml-2 flex-shrink-0 ${activeProject === slug ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+                        {count}
+                      </span>
+                    </button>
                   ))}
                 </div>
               )}

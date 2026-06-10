@@ -171,6 +171,12 @@ export default function GraphPage() {
                 {selected.description && (
                   <p className="text-xs text-gray-600 mt-1">{selected.description}</p>
                 )}
+                <Link
+                  href={`/?file=${encodeURIComponent(selected.filePath)}`}
+                  className="text-xs text-indigo-600 hover:underline mt-1 inline-block"
+                >
+                  View in list →
+                </Link>
               </div>
               <button
                 type="button"
